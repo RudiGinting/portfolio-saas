@@ -1,0 +1,345 @@
+// prisma/schema.prisma
+// Dynamic MVVM Portfolio & Business Template
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// PORTFOLIO MODELS
+// ============================================================
+
+model Profile {
+  id          String   @id @default(cuid())
+  name        String
+  title       String
+  bio         String   @db.Text
+  email       String   @unique
+  phone       String?
+  location    String?
+  avatarUrl   String?
+  resumeUrl   String?
+  githubUrl   String?
+  linkedinUrl String?
+  twitterUrl  String?
+  websiteUrl  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skills       Skill[]
+  experiences  Experience[]
+  educations   Education[]
+  certificates Certificate[]
+
+  @@map("profiles")
+}
+
+model Project {
+  id           String    @id @default(cuid())
+  title        String
+  slug         String    @unique
+  description  String    @db.Text
+  content      String?   @db.Text
+  coverImage   String?
+  demoUrl      String?
+  githubUrl    String?
+  techStack    String[]
+  featured     Boolean   @default(false)
+  status       ProjectStatus @default(PUBLISHED)
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("projects")
+}
+
+model BlogPost {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  excerpt     String     @db.Text
+  content     String     @db.Text
+  coverImage  String?
+  tags        String[]
+  status      PostStatus @default(DRAFT)
+  publishedAt DateTime?
+  readTime    Int?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("blog_posts")
+}
+
+model Skill {
+  id         String   @id @default(cuid())
+  profileId  String
+  name       String
+  category   String
+  level      Int      @default(80) // 0-100
+  iconUrl    String?
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("skills")
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  profileId   String
+  company     String
+  position    String
+  description String    @db.Text
+  startDate   DateTime
+  endDate     DateTime?
+  isCurrent   Boolean   @default(false)
+  location    String?
+  logoUrl     String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("experiences")
+}
+
+model Education {
+  id          String    @id @default(cuid())
+  profileId   String
+  institution String
+  degree      String
+  field       String
+  startDate   DateTime
+  endDate     DateTime?
+  gpa         String?
+  logoUrl     String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("educations")
+}
+
+model Certificate {
+  id           String    @id @default(cuid())
+  profileId    String
+  name         String
+  issuer       String
+  issueDate    DateTime
+  expiryDate   DateTime?
+  credentialId String?
+  credentialUrl String?
+  imageUrl     String?
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String        @db.Text
+  status    MessageStatus @default(UNREAD)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("contact_messages")
+}
+
+// ============================================================
+// DYNAMIC MODULE SYSTEM (Plugin Architecture)
+// ============================================================
+
+model Module {
+  id          String   @id @default(cuid())
+  name        String   @unique  // e.g. "customer", "product"
+  label       String            // e.g. "Customer", "Product"
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  isSystem    Boolean  @default(false) // System modules can't be deleted
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fields  ModuleField[]
+  records ModuleRecord[]
+
+  @@map("modules")
+}
+
+model ModuleField {
+  id           String    @id @default(cuid())
+  moduleId     String
+  name         String                  // field key, e.g. "email"
+  label        String                  // display label, e.g. "Email Address"
+  type         FieldType               // text, email, number, etc.
+  required     Boolean   @default(false)
+  unique       Boolean   @default(false)
+  defaultValue String?
+  placeholder  String?
+  options      Json?                   // for select/radio fields: [{label, value}]
+  validation   Json?                   // custom Zod validation rules
+  order        Int       @default(0)
+  isSystem     Boolean   @default(false)
+  isVisible    Boolean   @default(true)
+  isSearchable Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, name])
+  @@map("module_fields")
+}
+
+model ModuleRecord {
+  id        String   @id @default(cuid())
+  moduleId  String
+  data      Json                    // Dynamic data stored as JSON
+  createdBy String?
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("module_records")
+}
+
+// ============================================================
+// ACTIVITY LOG
+// ============================================================
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entityType String?  // module name
+  entityId   String?
+  description String
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+// ============================================================
+// AUTH (Next Auth compatible)
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MessageStatus {
+  UNREAD
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  NUMBER
+  PHONE
+  URL
+  DATE
+  DATETIME
+  BOOLEAN
+  SELECT
+  MULTISELECT
+  RADIO
+  CHECKBOX
+  FILE
+  IMAGE
+  RICH_TEXT
+  JSON
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
